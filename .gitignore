@@ -1,1 +1,13 @@
-charts/*.tgz
+# Helm: dependencies are fetched by `helm dependency build` (ArgoCD does it
+# too, from the committed Chart.lock) -- never commit the packaged archives.
+**/charts/*.tgz
+*.tgz
+# Helm scratch output
+helm-*/
+.helmignore.bak
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
