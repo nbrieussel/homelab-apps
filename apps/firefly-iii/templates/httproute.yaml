@@ -16,7 +16,11 @@ spec:
     - backendRefs:
         - group: ""
           kind: Service
-          name: firefly-iii
+          # Same naming rule as the upstream chart's fullname helper: the
+          # release name if it already contains the chart name (the real
+          # instance, release `firefly-iii`), else <release>-firefly-iii
+          # (previews, release `firefly-pr-<N>`).
+          name: {{ if contains "firefly-iii" .Release.Name }}{{ .Release.Name }}{{ else }}{{ .Release.Name }}-firefly-iii{{ end }}
           port: 80
           weight: 1
       matches:
