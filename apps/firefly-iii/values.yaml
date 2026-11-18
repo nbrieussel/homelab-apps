@@ -1,0 +1,52 @@
+# Values consumed by this chart's own templates.
+namespace: firefly-iii
+domain: staging.scalepack.fr
+hostPrefix: firefly
+# Overridden per cluster by the infra repo when it sets a host suffix.
+hostSuffix: ""
+
+gateway:
+  name: scaleway-gateway
+  namespace: gateway
+
+clusterSecretStoreName: openbao
+secretName: firefly-credentials
+# kv/apps/firefly/credentials, declared in the infra repo's
+# 11-secrets/openbao/managed. Keys: app-key, db-password.
+openbaoPath: apps/firefly/credentials
+
+postgres:
+  image: postgres:17-alpine
+  storage: 2Gi
+  database: firefly
+  user: firefly
+
+# Upstream chart values (nested under the dependency name).
+firefly-iii:
+  config:
+    existingSecret: firefly-credentials
+    env:
+      DB_HOST: firefly-db
+      DB_CONNECTION: pgsql
+      DB_PORT: "5432"
+      DB_DATABASE: firefly
+      DB_USERNAME: firefly
+      TZ: Europe/Paris
+      DEFAULT_LANGUAGE: fr_FR
+      DEFAULT_LOCALE: equal
+      TRUSTED_PROXIES: "**"
+      APP_URL: https://firefly.staging.scalepack.fr
+  # Credentials come from existingSecret, never from this file.
+  # The upstream chart always renders an app-key Secret and has no opt-out;
+  # a fixed placeholder keeps it deterministic (a random one would show as
+  # permanent drift in ArgoCD). It is NOT the real key: config.existingSecret
+  # is listed after it in envFrom and overrides APP_KEY.
+  secrets:
+    env: {}
+    appKey: "placeholder-overridden-by-secret"
+  persistence:
+    enabled: true
+    storage: 1Gi
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 512Mi}

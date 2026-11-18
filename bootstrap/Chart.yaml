@@ -1,0 +1,5 @@
+apiVersion: v2
+name: bootstrap
+description: App-of-apps entry point for the personal apps deployed on the homelab cluster
+type: application
+version: 0.1.0
