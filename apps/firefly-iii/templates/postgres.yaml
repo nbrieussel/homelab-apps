@@ -19,6 +19,13 @@ metadata:
 spec:
   serviceName: firefly-db
   replicas: 1
+  # API-server defaults, written explicitly to avoid permanent OutOfSync.
+  podManagementPolicy: OrderedReady
+  revisionHistoryLimit: 10
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {partition: 0}
+  persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
   selector:
     matchLabels: {app: firefly-db}
   template:
@@ -28,7 +35,7 @@ spec:
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}
-          ports: [{containerPort: 5432}]
+          ports: [{containerPort: 5432, protocol: TCP}]
           env:
             - {name: POSTGRES_DB, value: {{ .Values.postgres.database | quote }}}
             - {name: POSTGRES_USER, value: {{ .Values.postgres.user | quote }}}
@@ -48,5 +55,6 @@ spec:
     - metadata: {name: data}
       spec:
         accessModes: [ReadWriteOnce]
+        volumeMode: Filesystem
         resources:
           requests: {storage: {{ .Values.postgres.storage }}}
