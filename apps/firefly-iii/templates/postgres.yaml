@@ -15,7 +15,7 @@ metadata:
   name: firefly-db
   namespace: {{ .Values.namespace }}
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   serviceName: firefly-db
   replicas: 1
