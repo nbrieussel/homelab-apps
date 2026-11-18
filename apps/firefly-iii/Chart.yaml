@@ -1,0 +1,12 @@
+apiVersion: v2
+name: firefly-iii
+description: >-
+  Firefly III (personal finance manager): the upstream chart plus, in this
+  chart's own templates, a PostgreSQL StatefulSet, the ExternalSecret feeding
+  APP_KEY/DB_PASSWORD from OpenBao, and the HTTPRoute on the shared gateway.
+type: application
+version: 0.1.0
+dependencies:
+  - name: firefly-iii
+    version: 1.10.2
+    repository: https://firefly-iii.github.io/kubernetes

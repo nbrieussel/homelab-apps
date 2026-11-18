@@ -1,0 +1,12 @@
+# Set by the infrastructure repo's 10-cluster/modules/platform-apps-dag
+# (the `personal-apps` domain, source = "personal"), which passes the git
+# ref this cluster tracks. Must stay `main` on origin/main; override it on a
+# branch only to test end to end before merging.
+revision: main
+repoURL: https://github.com/nbrieussel/homelab-apps.git
+
+# One entry per app, rendered as a literal Application by
+# templates/apps.yaml (same pattern as IntegratedDynamic/gitops's bootstrap
+# chart: plain sync-waves on one parent's own resources, no ApplicationSet).
+apps:
+  - {name: firefly-iii, namespace: firefly-iii, chartPath: apps/firefly-iii, valueFile: values.yaml, wave: "0"}
