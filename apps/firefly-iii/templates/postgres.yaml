@@ -25,7 +25,7 @@ spec:
   updateStrategy:
     type: RollingUpdate
     rollingUpdate: {partition: 0}
-  persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
+  persistentVolumeClaimRetentionPolicy: {whenDeleted: {{ .Values.postgres.pvcRetention }}, whenScaled: Retain}
   selector:
     matchLabels: {app: firefly-db}
   template:

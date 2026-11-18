@@ -10,3 +10,12 @@ repoURL: https://github.com/nbrieussel/homelab-apps.git
 # chart: plain sync-waves on one parent's own resources, no ApplicationSet).
 apps:
   - {name: firefly-iii, namespace: firefly-iii, chartPath: apps/firefly-iii, valueFile: values.yaml, wave: "0"}
+
+# Per-PR ephemeral environments (templates/previews.yaml). A PR gets one when
+# it carries `label`.
+previews:
+  enabled: true
+  owner: nbrieussel
+  repo: homelab-apps
+  label: preview
+  requeueAfterSeconds: 180
