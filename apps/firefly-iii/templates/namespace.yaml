@@ -1,0 +1,10 @@
+{{- if .Values.ownNamespace }}
+# Ephemeral previews only: owning the Namespace makes ArgoCD delete it with
+# the Application (CreateNamespace=true would leave it behind).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+{{- end }}

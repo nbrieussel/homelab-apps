@@ -1,0 +1,62 @@
+# Ephemeral Firefly III per pull request: one Application per open PR of this
+# repo carrying the `{{ .Values.previews.label }}` label, deleted (with its
+# namespace and volumes) when the PR is closed/merged or the label removed.
+# Opt-in by label on purpose: each preview costs a Firefly pod + a Postgres.
+{{- if .Values.previews.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: firefly-previews
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - pullRequest:
+        github:
+          owner: {{ .Values.previews.owner }}
+          repo: {{ .Values.previews.repo }}
+          labels:
+            - {{ .Values.previews.label }}
+        # Polling only (no webhook, no token: public repo, ~20 API calls/h
+        # against the 60/h anonymous limit).
+        requeueAfterSeconds: {{ .Values.previews.requeueAfterSeconds }}
+  template:
+    metadata:
+      name: {{ `firefly-pr-{{ .number }}` }}
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: {{ .Values.repoURL }}
+        # head_sha, not the branch: each push re-renders the preview.
+        targetRevision: {{ `'{{ .head_sha }}'` }}
+        path: apps/firefly-iii
+        helm:
+          valueFiles:
+            - values.yaml
+          parameters:
+            - name: namespace
+              value: {{ `firefly-pr-{{ .number }}` }}
+            - name: ownNamespace
+              value: "true"
+              forceString: true
+            - name: hostPrefix
+              value: {{ `firefly-pr-{{ .number }}` }}
+            - name: postgres.pvcRetention
+              value: Delete
+            - name: firefly-iii.config.env.APP_URL
+              value: {{ `https://firefly-pr-{{ .number }}.staging.scalepack.fr` }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ `firefly-pr-{{ .number }}` }}
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        # No CreateNamespace: the chart owns the Namespace (ownNamespace) so
+        # that deleting the Application also deletes the namespace.
+        syncOptions:
+          - ServerSideApply=true
+{{- end }}
