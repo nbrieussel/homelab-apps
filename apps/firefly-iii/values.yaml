@@ -15,7 +15,14 @@ secretName: firefly-credentials
 # 11-secrets/openbao/managed. Keys: app-key, db-password.
 openbaoPath: apps/firefly/credentials
 
+# true for ephemeral PR previews: the chart then owns its Namespace, so
+# deleting the Application removes the namespace too.
+ownNamespace: false
+
 postgres:
+  # What happens to the DB volume when the StatefulSet is deleted. Retain for
+  # the real instance; previews set Delete (else every closed PR leaks a PVC).
+  pvcRetention: Retain
   image: postgres:17-alpine
   storage: 2Gi
   database: firefly
