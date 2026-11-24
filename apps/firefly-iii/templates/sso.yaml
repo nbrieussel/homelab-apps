@@ -1,0 +1,151 @@
+{{- /*
+Firefly behind the platform's SSO (authentik's forward-auth, infra issue #135)
+AND signed in by it: Firefly's `remote_user_guard` logs the user in from the
+identity header authentik sets, so there is no second login.
+
+WHY THIS FILE IS CAREFUL. With remote_user_guard Firefly does NO validation of
+that header (its own docs: "absolutely NO checks"). Whoever can make Firefly see
+`HTTP_X_AUTHENTIK_EMAIL: <an email>` IS that user, owner included. So the header
+must only ever come from authentik, and these are the three things holding that:
+  1. the SecurityPolicy below puts EVERY request except /api and the outpost
+     callback behind authentik's decision, and overwrites the header with the
+     one authentik returns (failOpen: false, so authentik being down denies);
+  2. the gateway strips the identity headers authentik's outpost sets (x-authentik-
+     email, groups, ... an explicit list) when a client sends them, BEFORE that
+     check (IntegratedDynamic/gitops, services/platform/gateway/config,
+     ClientTrafficPolicy) -- Envoy only overwrites the header when authentik
+     returns it, a client's own copy would otherwise pass through (reproduced);
+  3. who may get past authentik is its access policy (a group binding in the
+     infra repo's 14-sso/managed), kept to platform-admins.
+And this chart refuses to render the guard without the policy (below): the guard
+and the forward-auth are one switch, `sso.enabled`, never two.
+
+/api is deliberately NOT behind the forward-auth: the mobile apps and the data
+importer authenticate with a Firefly personal access token in an Authorization
+header and cannot take part in a browser login. Firefly protects those routes
+itself (Passport tokens: a request with only the identity header, or a bad
+token, gets 401 -- checked on 6.7.9).
+
+The three objects below are the same as the gitops repo's charts/sso-guard
+(Envoy Gateway extAuth SecurityPolicy, the per-host outpost route, the
+ReferenceGrant to authentik's Service). They are copied here, not depended on,
+because that chart is a file:// dependency of the gitops repo and this repo is
+separate. Keep them in step with it.
+*/ -}}
+{{- $guard := index .Values "firefly-iii" "config" "env" "AUTHENTICATION_GUARD" | default "" }}
+{{- if and (eq $guard "remote_user_guard") (not .Values.sso.enabled) }}
+{{- fail "AUTHENTICATION_GUARD=remote_user_guard trusts a header with no validation: it may only be set together with sso.enabled=true (the forward-auth that owns that header)" }}
+{{- end }}
+{{- if .Values.sso.enabled }}
+---
+# Envoy asks authentik's embedded outpost about every request on the main route
+# before forwarding it. headersToExtAuth must carry `cookie` (an HTTP ext-auth
+# service otherwise sees no session and loops on login). Only the email comes
+# back to Firefly: it is the one thing the guard reads.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: firefly-iii-sso
+  namespace: {{ .Values.namespace }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: firefly-iii
+  extAuth:
+    failOpen: false
+    headersToExtAuth:
+      - cookie
+      - x-forwarded-proto
+      - x-forwarded-for
+      - user-agent
+    http:
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ .Values.sso.authentikServiceName }}
+          namespace: {{ .Values.sso.authentikServiceNamespace }}
+          port: {{ .Values.sso.authentikServicePort }}
+          weight: 1
+      path: /outpost.goauthentik.io/auth/envoy
+      headersToBackend:
+        - x-authentik-email
+---
+# The outpost's own endpoints (login callback, sign-out) must reach it directly
+# on this host: the callback cannot itself go through the check that is waiting
+# for it. Not targeted by the SecurityPolicy, and more specific than `/`.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: firefly-iii-outpost
+  namespace: {{ .Values.namespace }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https
+  hostnames:
+    - {{ include "firefly.host" . }}
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ .Values.sso.authentikServiceName }}
+          namespace: {{ .Values.sso.authentikServiceNamespace }}
+          port: {{ .Values.sso.authentikServicePort }}
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /outpost.goauthentik.io
+---
+# /api straight to Firefly, outside the forward-auth (see the top of this file).
+# More specific than `/`, so it wins over the main route for these paths.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: firefly-iii-api
+  namespace: {{ .Values.namespace }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https
+  hostnames:
+    - {{ include "firefly.host" . }}
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ include "firefly.service" . }}
+          port: 80
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /api
+---
+# Lets this namespace's SecurityPolicy and outpost route reference authentik's
+# Service across namespaces.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: firefly-iii-sso-to-authentik
+  namespace: {{ .Values.sso.authentikServiceNamespace }}
+spec:
+  from:
+    - group: gateway.envoyproxy.io
+      kind: SecurityPolicy
+      namespace: {{ .Values.namespace }}
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ .Values.namespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ .Values.sso.authentikServiceName }}
+{{- end }}

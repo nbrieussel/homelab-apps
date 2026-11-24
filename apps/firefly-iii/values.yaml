@@ -19,6 +19,22 @@ openbaoPath: apps/firefly/credentials
 # deleting the Application removes the namespace too.
 ownNamespace: false
 
+# Platform SSO: authentik's forward-auth in front of Firefly, and Firefly signing
+# the user in from the identity header it sets (templates/sso.yaml explains the
+# trust model). OFF here on purpose: previews share this file and are not behind
+# authentik, so they keep Firefly's own login. The real instance turns it on from
+# bootstrap/values.yaml, together with the two Firefly settings it needs
+#   firefly-iii.config.env.AUTHENTICATION_GUARD=remote_user_guard
+#   firefly-iii.config.env.AUTHENTICATION_GUARD_HEADER=HTTP_X_AUTHENTIK_EMAIL
+# (the chart refuses to render the guard without sso.enabled).
+sso:
+  enabled: false
+  # authentik's in-cluster Service, referenced directly so the check never
+  # depends on external DNS or the Gateway.
+  authentikServiceName: authentik-server
+  authentikServiceNamespace: authentik
+  authentikServicePort: 80
+
 postgres:
   # What happens to the DB volume when the StatefulSet is deleted. Retain for
   # the real instance; previews set Delete (else every closed PR leaks a PVC).
@@ -30,6 +46,12 @@ postgres:
 
 # Upstream chart values (nested under the dependency name).
 firefly-iii:
+  # One replica on a ReadWriteOnce volume: the default RollingUpdate starts the new
+  # pod BEFORE stopping the old one, the new pod can land on another node, and
+  # then it waits forever for a volume the old pod still holds (seen live: the
+  # first config change after deploy stuck in ContainerCreating, "Volume is
+  # already used by pod(s) ..."). Recreate stops the old pod first.
+  deploymentStrategyType: Recreate
   config:
     existingSecret: firefly-credentials
     env:

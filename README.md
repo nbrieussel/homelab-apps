@@ -12,6 +12,33 @@ Kept separate from `IntegratedDynamic/gitops`, which holds the platform itself.
 - Secrets never live here (public repo): they are in OpenBao, declared in
   the infrastructure repo's `11-secrets/openbao/managed`.
 
+## Single sign-on (the real Firefly instance)
+
+The real instance sits behind the platform's authentik (forward-auth) and Firefly
+signs the user in from the e-mail authentik sends (`remote_user_guard`), so there
+is one login, not two. It is switched on in `bootstrap/values.yaml`
+(`sso.enabled` plus the two `AUTHENTICATION_GUARD*` settings: the chart refuses to
+render the guard without `sso.enabled`). Previews do not get it: they are not
+behind authentik and keep Firefly's own login.
+
+**Read `apps/firefly-iii/templates/sso.yaml` before touching this.** Firefly does
+no validation at all of that header, so whoever can make it see an e-mail IS that
+user. What keeps it honest: authentik's decision on every request except `/api`,
+the gateway stripping client-sent `x-authentik-*` identity headers (gitops,
+`services/platform/gateway/config`), and authentik's access policy (the
+`firefly` application in the infra repo's `14-sso/managed`: `platform-admins`).
+
+- The e-mail authentik knows MUST equal the existing Firefly account's, exactly
+  (Postgres compares case-sensitively): otherwise a second, empty account is
+  created. A new e-mail never becomes owner, only the first user ever created is.
+- `/api` is not behind the forward-auth (mobile apps and the data importer use a
+  Firefly personal access token), Firefly protects it with that token.
+- "Logout" in Firefly only ends Firefly's own session; the next request signs
+  back in. To really sign out, sign out of authentik.
+- **Merge order**: needs authentik on the cluster, so merge after the
+  IntegratedDynamic `gitops` and `infrastructure` authentik PRs. Without it the
+  forward-auth has nothing to ask and Firefly answers 403 (it fails closed).
+
 ## Preview environments (per pull request)
 
 Label a PR with **`preview`** and an ApplicationSet

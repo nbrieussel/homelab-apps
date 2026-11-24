@@ -9,7 +9,22 @@ repoURL: https://github.com/nbrieussel/homelab-apps.git
 # templates/apps.yaml (same pattern as IntegratedDynamic/gitops's bootstrap
 # chart: plain sync-waves on one parent's own resources, no ApplicationSet).
 apps:
-  - {name: firefly-iii, namespace: firefly-iii, chartPath: apps/firefly-iii, valueFile: values.yaml, wave: "0"}
+  # sso.enabled + the two Firefly settings go together (the chart refuses to
+  # render the guard without sso.enabled): the real instance sits behind
+  # authentik's forward-auth and is signed in from the identity it sets. Previews
+  # (templates/previews.yaml) do not get these, they are not behind authentik.
+  # Needs authentik to be deployed on the cluster (IntegratedDynamic/gitops
+  # services/platform/authentik): without it the forward-auth has nothing to ask
+  # and Firefly answers 403 (it fails closed).
+  - name: firefly-iii
+    namespace: firefly-iii
+    chartPath: apps/firefly-iii
+    valueFile: values.yaml
+    wave: "0"
+    parameters:
+      - {name: sso.enabled, value: "true"}
+      - {name: firefly-iii.config.env.AUTHENTICATION_GUARD, value: remote_user_guard}
+      - {name: firefly-iii.config.env.AUTHENTICATION_GUARD_HEADER, value: HTTP_X_AUTHENTIK_EMAIL}
 
 # Per-PR ephemeral environments (templates/previews.yaml). A PR gets one when
 # it carries `label`.
