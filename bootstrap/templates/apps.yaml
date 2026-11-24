@@ -18,6 +18,17 @@ spec:
     helm:
       valueFiles:
         - {{ .valueFile }}
+      {{- if .parameters }}
+      # Free-form extra Helm parameters for this entry ({name, value}), same
+      # convention as IntegratedDynamic/gitops's bootstrap chart. forceString so
+      # "true" stays a string instead of being typed as a boolean.
+      parameters:
+        {{- range .parameters }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+          forceString: true
+        {{- end }}
+      {{- end }}
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .namespace }}
