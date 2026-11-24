@@ -39,6 +39,28 @@ the gateway stripping client-sent `x-authentik-*` identity headers (gitops,
   IntegratedDynamic `gitops` and `infrastructure` authentik PRs. Without it the
   forward-auth has nothing to ask and Firefly answers 403 (it fails closed).
 
+## Backup and restore (the real Firefly instance)
+
+Firefly's data lives only on two volumes (the PostgreSQL data and the uploads), and
+a cluster `down` deletes them. The platform snapshots both every 4 hours with Velero
+(IntegratedDynamic/gitops, `velero` chart, schedule `firefly-data`, kept 60 days) and
+the `firefly-restore` entry of `bootstrap/values.yaml`, the wave BEFORE Firefly,
+brings the latest snapshot back on a fresh cluster. The restore is the gitops repo's
+generic `charts/velero-pvc-restore` (`source: gitops`): one copy of the logic, shared
+with authentik; its README explains what it checks and how to run a restore drill.
+
+- A running cluster is a no-op: it never overwrites a volume that exists.
+- It fails closed (only Firefly waits, nothing else on the platform) rather than
+  starting Firefly on empty volumes when a backup should restore.
+- Not backed up here, on purpose: `APP_KEY` and the DB password (OpenBao, whose own
+  hourly snapshot carries them; the restored database needs them), the previews
+  (their own `firefly-pr-<N>` namespaces, fresh data).
+- A snapshot is crash-consistent and up to 4 hours old.
+- Take one now: `kubectl exec -n velero deploy/velero -c velero -- /velero backup
+  create --from-schedule velero-firefly-data --wait`.
+- Merge order: the gitops chart must exist on gitops `main` first (the entry reads it
+  from there), like the SSO.
+
 ## Preview environments (per pull request)
 
 Label a PR with **`preview`** and an ApplicationSet

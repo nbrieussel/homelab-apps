@@ -1,4 +1,13 @@
 {{- range $app := .Values.apps }}
+{{- /* An entry takes its chart from this repo, or from the platform's gitops repo
+(`source: gitops`: a generic platform chart such as velero-pvc-restore, configured
+with `valuesObject`). */ -}}
+{{- $repoURL := $.Values.repoURL }}
+{{- $revision := $.Values.revision }}
+{{- if eq (.source | default "") "gitops" }}
+{{- $repoURL = $.Values.gitops.repoURL }}
+{{- $revision = $.Values.gitops.revision }}
+{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -12,12 +21,18 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: {{ $.Values.repoURL }}
-    targetRevision: {{ $.Values.revision }}
+    repoURL: {{ $repoURL }}
+    targetRevision: {{ $revision }}
     path: {{ .chartPath }}
     helm:
+      {{- if .valueFile }}
       valueFiles:
         - {{ .valueFile }}
+      {{- end }}
+      {{- if .valuesObject }}
+      valuesObject:
+        {{- toYaml .valuesObject | nindent 8 }}
+      {{- end }}
       {{- if .parameters }}
       # Free-form extra Helm parameters for this entry ({name, value}), same
       # convention as IntegratedDynamic/gitops's bootstrap chart. forceString so

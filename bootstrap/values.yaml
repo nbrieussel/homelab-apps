@@ -5,10 +5,38 @@
 revision: main
 repoURL: https://github.com/nbrieussel/homelab-apps.git
 
+# The platform's gitops repo, for the entries that use one of its generic charts
+# (`source: gitops` below). Same rule as `revision`: `main` on origin/main, a branch
+# only to test before merging (the cluster's bootstrap sets it through its
+# `personal-apps` entry parameters).
+gitops:
+  repoURL: https://github.com/IntegratedDynamic/gitops.git
+  revision: main
+
 # One entry per app, rendered as a literal Application by
 # templates/apps.yaml (same pattern as IntegratedDynamic/gitops's bootstrap
 # chart: plain sync-waves on one parent's own resources, no ApplicationSet).
 apps:
+  # Firefly's data (the PostgreSQL volume and the uploads volume) lives only on those
+  # two volumes, which a cluster `down` deletes: Velero snapshots them every 4 hours
+  # (gitops, velero chart, schedule `firefly-data`, kept 60 days) and this entry puts
+  # the latest snapshot back on a fresh cluster BEFORE Firefly (the next wave) creates
+  # empty ones. The generic chart is in the gitops repo (one copy of the logic, shared
+  # with authentik; see its README). It is a no-op when the volumes exist, and it
+  # needs only Velero, which is up: Firefly is deployed after the whole platform.
+  # If it fails (Velero not ready, a backup that should restore does not), only
+  # Firefly waits.
+  - name: firefly-restore
+    namespace: firefly-iii
+    source: gitops
+    chartPath: charts/velero-pvc-restore
+    wave: "0"
+    valuesObject:
+      scheduleName: velero-firefly-data
+      pvcs:
+        - data-firefly-db-0
+        - firefly-iii
+
   # sso.enabled + the two Firefly settings go together (the chart refuses to
   # render the guard without sso.enabled): the real instance sits behind
   # authentik's forward-auth and is signed in from the identity it sets. Previews
@@ -20,7 +48,7 @@ apps:
     namespace: firefly-iii
     chartPath: apps/firefly-iii
     valueFile: values.yaml
-    wave: "0"
+    wave: "1"
     parameters:
       - {name: sso.enabled, value: "true"}
       - {name: firefly-iii.config.env.AUTHENTICATION_GUARD, value: remote_user_guard}
